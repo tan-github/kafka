@@ -1,0 +1,11 @@
+{
+    "name": "tan-github/kafka",
+    "type": "library",
+    "authors": [
+        {
+            "name": "tan",
+            "email": "923360732@qq.com"
+        }
+    ],
+    "require": {}
+}
