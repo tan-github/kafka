@@ -1,5 +1,6 @@
 {
     "name": "tan-github/kafka",
+    "description": "php kafka",
     "type": "library",
     "authors": [
         {
@@ -7,5 +8,6 @@
             "email": "923360732@qq.com"
         }
     ],
+    "minimum-stability": "stable",
     "require": {}
 }
