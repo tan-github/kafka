@@ -21,7 +21,7 @@ class Kafka
     //public $logFile = './kafkalog/info.log';
 
     //是否轮询读取分区
-    private $is_roundrobin = true;
+    private $is_roundrobin = false;
     //生成者kafka主题对象
     private $kafak_topic = null;
     //生产者对象
