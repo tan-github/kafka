@@ -38,6 +38,12 @@ class Kafka
     //心跳时间（毫秒）
     private $heartbeat_ms = 0;
 
+    //使用分区管理器
+    private $use_partition_manage = false;
+    //分区管理器对象
+    private $partition_manage_obj = null;
+    private $partition_arr = array();
+
     /**
      * 设置是否开启监听提升
      * @param bool $is_show_listens_tip
@@ -74,7 +80,32 @@ class Kafka
         return $this->consumer;
     }
 
-    
+    /**
+     * 设置指定分区
+     * @param bool $appoint_partition
+     */
+    public function setAppointPartition($appoint_partition)
+    {
+        $this->appoint_partition = $appoint_partition;
+    }
+
+    /**
+     * @param bool $use_partition_manage
+     */
+    public function setUsePartitionManage($use_partition_manage)
+    {
+        $this->use_partition_manage = $use_partition_manage;
+    }
+
+
+    /**
+     * @param null $partition_manage_obj
+     */
+    public function setPartitionManageObj($partition_manage_obj)
+    {
+        $this->partition_manage_obj = $partition_manage_obj;
+    }
+
     /**
      * kafka constructor.
      * @param $kafka_type 类型 'producer','consumer'
@@ -91,7 +122,11 @@ class Kafka
 
         if (empty($broker_list))
         {
-            echo 'broker_list 没有配置';
+            echo 'broker_list 没有配置' . PHP_EOL;
+        }
+
+        if ($this->use_partition_manage && !$this->partition_manage_obj) {
+            echo '没有设置分区管理' . PHP_EOL;
         }
 
         $this->broker_list = $broker_list;
@@ -105,7 +140,9 @@ class Kafka
         //$conf->set('enable.idempotence', 'true');
 
         if ($kafka_type == self::CONSUMER) {
-            $conf->setRebalanceCb(function (\RdKafka\KafkaConsumer $kafka, $err, array $partitions = null) {
+            $partition_arr = array();
+
+            $conf->setRebalanceCb(function (\RdKafka\KafkaConsumer $kafka, $err, array $partitions = null) use (&$partition_arr) {
                 switch ($err) {
                     case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
 //                        echo "Assign: ";
@@ -122,7 +159,11 @@ class Kafka
                     default:
                         throw new \Exception($err);
                 }
+                $partition_arr = $partitions;
+
             });
+            $this->partition_arr = &$partition_arr;
+
             $conf->set('group.id', $consumer_group);
             $conf->set('auto.offset.reset', 'latest');
             //关闭自动提交
@@ -155,7 +196,12 @@ class Kafka
     {
         $rs = array('status' => 0, 'msg' => '');
 
-        $this->kafak_topic->produce(RD_KAFKA_PARTITION_UA, 0, $message);
+        $partition_no = RD_KAFKA_PARTITION_UA;
+        if ($this->use_partition_manage && $this->partition_manage_obj) {
+            $partition_no = $this->partition_manage_obj->getMinNumPartiton();
+        }
+
+        $this->kafak_topic->produce($partition_no, 0, $message);
         $this->producer->poll(0);
 
         $result = $this->producer->flush(10000);
@@ -182,6 +228,14 @@ class Kafka
             $error_msg = '';
             //是否是监听中
             $is_listening = false;
+
+            //设置分区数
+            if ($this->use_partition_manage && $this->partition_manage_obj && !$this->partition_manage_obj->isPartArrExist()) {
+                $part_num = count($this->partition_arr);
+                if ($part_num) {
+                    $this->partition_manage_obj->setPartNum($part_num);
+                }
+            }
 
             try {
                 switch ($message->err) {
@@ -225,6 +279,11 @@ class Kafka
                         }
 
                         $this->consumer->commit();
+
+                        //设置分区消息数量
+                        if ($this->use_partition_manage && $this->partition_manage_obj) {
+                            $this->partition_manage_obj->setPartitionNum($message->partition);
+                        }
                     }
                 }
             } catch (\Exception $ex) {
@@ -240,15 +299,3 @@ class Kafka
 }
 
 
-//测试
-//$broker_list = "192.168.1.239:9092,192.168.1.247:9092,192.168.1.248:9092";
-//$topic = 'test_php2';
-
-//消费者
-//$rk = new Kafka(Kafka::CONSUMER,$broker_list,$topic,0);
-//$rk->consumer();
-
-//生成者
-//$rk = new Kafka(Kafka::PRODUCER,$broker_list,$topic,0);
-//$rs = $rk->sendMessage('aaa22221');
-//var_dump($rs);
